@@ -1,15 +1,20 @@
 # main.py
 from pipeline import DroneVisionPipeline
+import pafy
 import cv2
+from vidgear.gears import CamGear
 
-cap = cv2.VideoCapture(0)
+url = "https://www.youtube.com/watch?v=se1RDOPvA8Q"
+stream = CamGear(source=url, stream_mode = True, logging=True).start() # YouTube Video URL as input
 pipeline = DroneVisionPipeline(yolo_model="yolov5s.pt")
-
 user_selected_id = None
-
+# infinite loop
 while True:
-    ret, frame = cap.read()
-    if not ret:
+    
+    frame = stream.read()
+    # check if frame is None
+    if frame is None:
+        #if True break the infinite loop
         break
 
     output = pipeline.process_frame(frame, user_selected_id=user_selected_id)

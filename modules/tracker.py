@@ -2,57 +2,56 @@
 from deep_sort_realtime.deepsort_tracker import DeepSort
 
 class ObjectTracker:
-    def __init__(self, max_age=30, n_init=3):
+    def __init__(self, max_cosine_distance=0.5, nn_budget=100):
         """
-        DeepSORT Tracker
-        :param max_age: frames to keep alive a track without detection
-        :param n_init: number of frames before confirming a track
+        Initialize the tracker with parameters
+        :param max_cosine_distance: max cosine distance for matching
+        :param nn_budget: budget for nearest neighbor (memory) in DeepSORT
         """
-        self.tracker = DeepSort(max_age=max_age, n_init=n_init)
+        self.tracker = DeepSort(max_cosine_distance=max_cosine_distance, nn_budget=nn_budget)
 
     def update(self, frame, detections):
         """
-        Update tracker with new detections
-        :param frame: current BGR frame (not used by DeepSORT but required)
-        :param detections: list of dicts from YOLODetector
-        :return: list of tracked objects:
-                 (track_id, bbox, class_id, class_name, confidence)
+        Update the tracker with new detections
+        :param frame: The current frame (for visualization)
+        :param detections: List of detections in the format [x_min, y_min, x_max, y_max, confidence, class_id]
+        :return: List of tracked objects
         """
-        # Convert detections to DeepSORT format: [x1, y1, x2, y2, conf, class_id]
-        det_list = []
+        # Ensure the detections are in the correct format
+        formatted_detections = []
         for det in detections:
-            x1, y1, x2, y2 = det['bbox']
-            conf = det['conf']
-            cls = det['class_id']
-            det_list.append([x1, y1, x2, y2, conf, cls])
+            # Check if the detection has 6 elements
+            if len(det) == 6:
+                x_min, y_min, x_max, y_max, confidence, class_id = det
+                # Add the detection in [x_min, y_min, x_max, y_max, confidence, class_id] format
+                formatted_detections.append([x_min, y_min, x_max, y_max, confidence, class_id])
+            else:
+                print(f"Skipping invalid detection: {det}")
 
-        tracks = self.tracker.update_tracks(det_list, frame=frame)
+        # Ensure we have valid detections
+        if len(formatted_detections) > 0:
+            # Update the DeepSORT tracker
+            tracks = self.tracker.update_tracks(formatted_detections, frame=frame)
+        else:
+            tracks = []
 
-        tracked_objects = []
-        for t in tracks:
-            if not t.is_confirmed():
-                continue
-            track_id = t.track_id
-            ltrb = t.to_ltrb()  # left, top, right, bottom
-            class_id = t.det_class if hasattr(t, 'det_class') else -1
-            class_name = str(class_id)
-            conf = t.det_conf if hasattr(t, 'det_conf') else 0
-            tracked_objects.append((track_id, ltrb, class_id, class_name, conf))
+        return tracks
 
-        return tracked_objects
-
-    def draw_tracks(self, frame, tracked_objects):
+    def draw_tracks(self, frame, tracks):
         """
-        Draw tracked objects on frame
-        :param frame: BGR image
-        :param tracked_objects: list returned by update()
-        :return: frame with tracks drawn
+        Draw the tracks on the frame
+        :param frame: The current frame
+        :param tracks: The list of tracked objects
+        :return: Frame with drawn tracks
         """
-        import cv2
-        for track_id, bbox, class_id, class_name, conf in tracked_objects:
-            x1, y1, x2, y2 = map(int, bbox)
-            label = f"ID {track_id} {class_name} {conf:.2f}"
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
-            cv2.putText(frame, label, (x1, y1 - 5),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+        for track in tracks:
+            # Draw a rectangle for each track
+            x1, y1, x2, y2 = track[0]  # Get the bounding box coordinates
+            track_id = track[1]  # Get the track ID
+
+            # Draw the bounding box and track ID
+            color = (0, 255, 0)  # Green color for tracks
+            frame = cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            frame = cv2.putText(frame, f"ID {track_id}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
         return frame
